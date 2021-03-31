@@ -99,6 +99,11 @@ function computeSumsOfScoresOfPlayers(scores) {
   for (const score of scores) {
     const player = score.player;
 
+    // if the score is a string like 1.23m or 4.56M
+    if (score.score.toLowerCase().endsWith('m')) {
+      score.score = parseFloat(score.score) * 1e6;
+    }
+
     if (player in scoreSums) {
       scoreSums[player] += score.score;
     } else {
