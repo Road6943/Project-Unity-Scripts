@@ -1,16 +1,40 @@
-function gatherData(sheetsToGatherDataFrom) {
+const SHEET_NAME_TO_GATHER_DATA_FROM = "Scores";
+
+function gatherData() {
+  // out: Dict of sheetName(tank category table strip header) => 2D Array of the sheet values of that table strip
+  /*
+    Previously, each tank category had its own sheet tab consisting of one table column
+    Now, all the sheet tabs are combined into one, with each table still in the long columns format,
+      but all the table strips are side by side separated by a thin empty column
+
+    To make things easier for myself, I decided to only alter this one function (gatherData)
+    To clarify, I modified gatherData so that it gathers all values from the single sheet, and then splits the
+      table strips of each tank category. Then, each table strip is put into the Dict/Obj as a separate key/val pair,
+      mimicing what happened when each table strip was on its own sheet tab
+  */
   const allSheetsValues = {};
 
-  for (const sheetName of sheetsToGatherDataFrom) {
-    const sheetValues = 
-      SpreadsheetApp
-        .getActiveSpreadsheet()
-        .getSheetByName(sheetName)
-        .getDataRange()
-        .getValues()
+  const sheetValues = 
+    SpreadsheetApp
+      .getActiveSpreadsheet()
+      .getSheetByName(SHEET_NAME_TO_GATHER_DATA_FROM)
+      .getDataRange()
+      .getValues()
+      ;
+
+  const numColumns = sheetValues[0].length;
+  const numColsPerTankCategoryTable = 4;
+
+  // the +1 is because of the blank column between each tank category table strip
+  for (let i = 0; i < numColumns; i += (numColsPerTankCategoryTable + 1)) {
+    const tankCategoryName = sheetValues[0][i];
+    const tankCategoryData = 
+      sheetValues
+        .slice(1) // ignore the header row with the tank category name
+        .map(row => row.slice(i, i + numColsPerTankCategoryTable)) // get the specific columns we want only
         ;
-    
-    allSheetsValues[sheetName] = sheetValues;
+        
+    allSheetsValues[tankCategoryName] = tankCategoryData;
   }
 
   return allSheetsValues;
@@ -18,6 +42,10 @@ function gatherData(sheetsToGatherDataFrom) {
 
 
 function formatData(allSheetsValues) {
+  // in: Dict of sheetName(tank category table strip header) => 2D Array of the sheet values of that table strip
+  // out: List of scoreObjects with various data about every single score on the sheet
+  // This func turns the raw spreadsheet data values into a more easily workable format
+
   const rowTypes = {tank: 0, labels: 1, data: 2, empty: 3 };
   
   const detectRowType = function(row) {
@@ -94,20 +122,23 @@ function formatData(allSheetsValues) {
 
 
 function computeSumsOfScoresOfPlayers(scores) {
+  // in: List of score objects containing information about each score on the sheet
+  // out: Dict where each player name is keyed to the total sum of all their scores on the sheet
+
   const scoreSums = {};
 
-  for (const score of scores) {
-    const player = score.player;
+  for (const scoreObj of scores) {
+    const player = scoreObj.player;
 
     // if the score is a string like 1.23m or 4.56M
-    if (score.score.toLowerCase().endsWith('m')) {
-      score.score = parseFloat(score.score) * 1e6;
+    if (scoreObj.score.toLowerCase().endsWith('m')) {
+      scoreObj.score = parseFloat(scoreObj.score) * 1e6;
     }
 
     if (player in scoreSums) {
-      scoreSums[player] += score.score;
+      scoreSums[player] += scoreObj.score;
     } else {
-      scoreSums[player] = score.score;
+      scoreSums[player] = scoreObj.score;
     }
   }
 
@@ -134,6 +165,8 @@ function getCustomSortFunc(sumsOfScoresOfPlayers) {
 
 
 function computePlayersWithMostPlacements(scores, customSortFunc) {
+  // in: List of score data objects and a custom sort function
+  // out: 2D array that is ready to be printed to the main spreadsheet's stats tab
   const players = {};
   
   for (const score of scores) {
@@ -151,6 +184,8 @@ function computePlayersWithMostPlacements(scores, customSortFunc) {
 
 
 function computePlayersWithMostNumOneSpots(scores, customSortFunc) {
+  // in: List of score data objects and a custom sort function
+  // out: 2D array that is ready to be printed to the main spreadsheet's stats tab
   const players = {};
 
   for (const score of scores) {
@@ -170,6 +205,7 @@ function computePlayersWithMostNumOneSpots(scores, customSortFunc) {
 
 function printToSheet(data, topLeftCell) {
   // values will be printed onto the sheet starting from the topLeftCell
+  // topLeftCell should be a string like "A1"; Note that this only works for Cols A-Z
   const topLeftCol = topLeftCell[0].toLowerCase().charCodeAt(0) - 'a'.charCodeAt(0) + 1;
   const topLeftRow = topLeftCell[1];
 
@@ -193,26 +229,8 @@ function printToSheet(data, topLeftCell) {
 }
 
 
-sheetsToGatherDataFrom = [
-  "Unfocused Spammers", 
-  "Focused Spammers", 
-  "Auto Tanks", 
-  "Builders", 
-  "Drone Tanks", 
-  "Snipers", 
-  "Cruisers", 
-  "Underseers", 
-  "Trappers", 
-  "Tri Angles", 
-  "Smashers", 
-  "Miniguns", 
-  "Spawners", 
-  "Destroyers",  
-];
-
-
 function main() {
-  const gatheredData = gatherData(sheetsToGatherDataFrom);
+  const gatheredData = gatherData();
   const formattedData = formatData(gatheredData);
   
   // used for tie-breaking
